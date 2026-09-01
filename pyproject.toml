@@ -1,7 +1,7 @@
 [project]
 name = "klpcda"
 version = "0.1.0"
-description = "Kernelized Linear Principal Component Discriminant Analysis -- a scikit-learn-style estimator for small-sample, high-dimensional discriminant analysis"
+description = "Kernelized Linear Principal Component Discriminant Analysis -- a scikit-learn-style estimator for small-sample, high-dimensional discriminant analysis, with a pipeline for applying it to frozen LLM sentence embeddings"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -13,6 +13,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+embeddings = [
+    "sentence-transformers>=2.7",
+    "datasets>=2.19",
+]
 dev = [
     "pytest>=7.4",
 ]
@@ -22,7 +26,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["klpcda*", "llm_pipeline*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

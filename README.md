@@ -30,6 +30,37 @@ auditable rather than asserted.
 identity, the fusion-coefficient behavior for No.1/No.2, and two regression
 tests for the numerical failure modes documented in `DECISIONS.md`.
 
+## Applying it to frozen LLM embeddings
+
+`llm_pipeline/` connects `KLPCDA` to sentence-embedding models: extract and
+cache embeddings for a text classification dataset
+(`llm_pipeline/extract_embeddings.py`, via `sentence-transformers`), then
+draw a stratified k-shot support set (`llm_pipeline/sampler.py`) to `fit` a
+`KLPCDA` model directly on the cached embedding vectors. This is the
+plumbing only — a systematic evaluation of which KLPCDA variant works best
+on which embedding model/dataset combination is an active research
+direction, written up separately once that work is public.
+
+```bash
+pip install -e ".[embeddings]"
+python -m llm_pipeline.extract_embeddings \
+    --dataset mteb/banking77 --model sentence-transformers/all-MiniLM-L6-v2 \
+    --out cache/banking77_minilm.npz
+```
+
+```python
+import numpy as np
+from klpcda import KLPCDA
+from llm_pipeline.sampler import k_shot_indices
+
+cached = np.load("cache/banking77_minilm.npz", allow_pickle=True)
+X_train, y_train = cached["X_train"], cached["y_train"]
+
+support_idx = k_shot_indices(y_train, k=5, seed=0)
+model = KLPCDA(method="no6", n_components=10, kernel="linear")
+Z_support = model.fit_transform(X_train[support_idx], y_train[support_idx])
+```
+
 ## Quickstart
 
 ```bash
@@ -76,7 +107,8 @@ src/klpcda/
     estimator.py   # KLPCDA (BaseEstimator, TransformerMixin)
     scatter.py      # between-/within-class scatter operators B, W
     kernels.py       # linear/poly/rbf kernels + double-centering
-tests/               # 21 unit tests, incl. regressions for DECISIONS.md items 4-5
+llm_pipeline/        # extraction + k-shot sampling for frozen LLM embeddings
+tests/               # unit tests, incl. regressions for DECISIONS.md items 4-5
 reference/matlab/    # the authors' original MATLAB implementation (ground truth)
 DECISIONS.md         # every place this port diverges from the MATLAB reference, and why
 ```
