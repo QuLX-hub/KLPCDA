@@ -92,9 +92,9 @@ def test_no7_selects_smallest_eigenvalues():
 
 
 def test_fusion_coefficients_change_subspace_for_no2():
-    # DECISIONS.md item 1: unlike the reference MATLAB, (alpha, beta) must
-    # change the *learned subspace* for Method No.2, not just eigenvalue
-    # scale -- because they weight two independently-summed terms.
+    # (alpha, beta) must change the *learned subspace* for Method No.2, not
+    # just eigenvalue scale -- because they weight two independently-summed
+    # terms.
     #
     # Built so C-only (pure variance/PCA) and S_b-only (pure between-class)
     # are forced to disagree: dims 1-4 carry large shared ("nuisance")
@@ -162,12 +162,11 @@ def test_no1_no3_no5_do_not_collapse_when_W_is_rank_deficient():
 
 
 def test_break_ties_ranks_by_tie_break_ascending():
-    # Regression test for DECISIONS.md's tie-break fix: within a
-    # (near-)degenerate eigenspace, `_break_ties` must replace
-    # numpy.linalg.eig's arbitrary basis with one ranked by the tie-break
-    # criterion *ascending* -- empirically the direction that dramatically
-    # improved No.1/No.5's real-data accuracy (see the estimator.py
-    # docstring for the reasoning).
+    # Regression test for the tie-break fix: within a (near-)degenerate
+    # eigenspace, `_break_ties` must replace numpy.linalg.eig's arbitrary
+    # basis with one ranked by the tie-break criterion *ascending* --
+    # empirically the direction that dramatically improved No.1/No.5's
+    # real-data accuracy (see the estimator.py docstring for the reasoning).
     rng = np.random.default_rng(0)
     n, r = 6, 4
     Q, _ = np.linalg.qr(rng.normal(size=(n, n)))

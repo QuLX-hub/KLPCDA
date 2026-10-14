@@ -31,8 +31,9 @@ def test_centered_kernel_rows_and_columns_sum_to_zero():
 def test_out_of_sample_centering_matches_manual_formula():
     # Direct check against the textbook out-of-sample centering formula
     # (Schölkopf et al., 1998), computed entry-by-entry from RAW kernels.
-    # This is the formula DECISIONS.md item 2 says the MATLAB reference
-    # under-applies by feeding it an already-centered training kernel.
+    # `center_test_kernel` must use the raw training kernel for this, not an
+    # already-centered one, which would silently drop two of the three
+    # correction terms.
     rng = np.random.default_rng(2)
     X_train = rng.normal(loc=1.5, size=(6, 3))  # deliberately non-zero-mean
     X_test = rng.normal(loc=1.5, size=(2, 3))

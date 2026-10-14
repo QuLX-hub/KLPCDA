@@ -1,20 +1,19 @@
 """KLPCDA: a scikit-learn-style estimator for the seven variants of
 
 Qu & Pei, "Kernelized Linear Principal Component Discriminant Analysis",
-Neural Networks 198 (2026) 108539 (paper 2), and the companion cross-domain
-ablation study (paper 3, "A Kernel-Based Modular Discriminant Analysis
-Framework for Small-Sample Learning").
+Neural Networks 198 (2026) 108539, and the companion cross-domain ablation
+study ("A Kernel-Based Modular Discriminant Analysis Framework for
+Small-Sample Learning").
 
-Design note: this port follows the structure of the authors' own reference
-MATLAB implementation (``KLPCDA_main.m`` / ``method_E_builder``) -- build a
-single operator E via pseudo-inverses of the (kernelized) scatter operators,
-then take its eigenvectors -- rather than reformulating each variant as a
-`scipy.linalg.eig(a, b)` generalized problem. Three deliberate deviations
-from that reference script are documented in ``DECISIONS.md`` at the repo
-root: fusion-coefficient placement for Method No.1/No.2, out-of-sample
-kernel centering, and a tie-break for No.1/No.5's exactly-degenerate
-eigenspace under balanced, class-per-sample-count-matched sampling. Read
-that file before trusting numbers produced here against the MATLAB code.
+Each variant builds a single operator E from pseudo-inverses of the
+(kernelized) scatter operators and takes its eigenvectors, rather than
+reformulating the problem as a `scipy.linalg.eig(a, b)` generalized
+eigenproblem. Three implementation choices that are not fully determined by
+the papers' own formulas are documented inline where they occur: the
+fusion-coefficient placement for Method No.1/No.2 (below `_FUSION_VARIANTS`),
+out-of-sample kernel centering (`kernels.center_test_kernel`), and a
+tie-break for No.1/No.5's exactly-degenerate eigenspace under balanced
+sampling (`_break_ties`, below).
 """
 
 from __future__ import annotations
@@ -30,10 +29,11 @@ VARIANTS = ("no1", "no2", "no3", "no4", "no5", "no6", "no7")
 
 # Variants whose target function is a *ratio* of two quadratic forms with a
 # single scalar coefficient (No.3/4/5/6/7): scaling that coefficient scales
-# the objective uniformly and provably cannot change the arg max/min -- see
-# DECISIONS.md. Only No.1 (three summed terms) and No.2 (two summed terms)
-# have an independently tunable *ratio between terms* that changes the
-# learned subspace.
+# the objective uniformly and provably cannot change the arg max/min. Only
+# No.1 (three summed terms) and No.2 (two summed terms) have an
+# independently tunable *ratio between terms* that changes the learned
+# subspace -- so `fusion` must be applied to each summed term before they
+# combine, not as a uniform rescale of the whole operator afterward.
 _FUSION_VARIANTS = ("no1", "no2")
 
 _UNSUPERVISED_VARIANTS = ("no4",)  # pure KPCA: no class labels needed
@@ -55,12 +55,11 @@ def _break_ties(
     what clustering just decided) rather than reordering by the noise-level
     differences that triggered the clustering in the first place.
 
-    See `DECISIONS.md` for why this exists: No.1 and No.5's own eigenvalues
-    are provably, exactly degenerate over their entire "signal" subspace
-    under balanced, class-per-sample-count-matched sampling -- this does not
-    patch a bug, it resolves a genuine ambiguity already present in the
-    paper's own ratio-of-quadratic-forms objective once the primary term
-    stops discriminating between directions.
+    No.1 and No.5's own eigenvalues are provably, exactly degenerate over
+    their entire "signal" subspace under balanced, class-per-sample-count-
+    matched sampling. This does not patch a bug; it resolves a genuine
+    ambiguity already present in their ratio-of-quadratic-forms objective
+    once the primary term stops discriminating between directions.
     """
     n = len(eigvals)
     order = np.argsort(eigvals)
@@ -81,13 +80,13 @@ def _break_ties(
             # Ascending, not descending: empirically, preferring the
             # *lowest*-tie-break-score direction within a tied cluster wins
             # decisively over preferring the highest -- verified against
-            # real high-dimensional embedding data at several sample sizes
-            # (see DECISIONS.md). The literal "maximize C/W" reading of
-            # No.5's own formula would suggest descending; that reading
-            # evidently does not extend correctly into this exact-tie
-            # regime the formula's authors likely never anticipated. Not
-            # fully explained theoretically -- flagged as an open question
-            # in DECISIONS.md rather than a settled mechanism.
+            # real high-dimensional embedding data at several sample sizes.
+            # The literal "maximize C/W" reading of No.5's own formula would
+            # suggest descending; that reading evidently does not extend
+            # correctly into this exact-tie regime. Not fully explained
+            # theoretically -- an open question rather than a settled
+            # mechanism (see the Limitations discussion in the paper this
+            # estimator supports).
             reorder = np.argsort(sub_vals)
             vecs[:, i:j] = V @ sub_vecs[:, reorder]
             vals[i:j] = vals[i:j].mean()
@@ -151,7 +150,7 @@ class KLPCDA(BaseEstimator, TransformerMixin):
     fusion : tuple(float, float), default (1.0, 1.0)
         (alpha, beta) weights for the variance term and the between-class
         term. Only meaningful for method in {"no1", "no2"} -- see
-        `_FUSION_VARIANTS` and DECISIONS.md. Ignored otherwise.
+        `_FUSION_VARIANTS` above. Ignored otherwise.
     reg : float
         Relative singular-value cutoff (`rcond`) passed to
         `numpy.linalg.pinv` when inverting `W @ K_tilde` for methods
@@ -165,11 +164,10 @@ class KLPCDA(BaseEstimator, TransformerMixin):
         not better: it turns an exact rank deficiency that `pinv` would
         otherwise truncate correctly into a full-rank matrix that gets
         inverted exactly, amplifying the near-zero directions to ~1/reg.
-        Verified empirically (see `DECISIONS.md`) that the true "signal"
-        singular values and the near-zero ones are separated by ~12 orders
-        of magnitude, so any `rcond` between 1e-10 and 1e-4 recovers the
-        same well-conditioned pseudo-inverse; the default sits in the
-        middle of that safe range.
+        Verified empirically that the true "signal" singular values and the
+        near-zero ones are separated by ~12 orders of magnitude, so any
+        `rcond` between 1e-10 and 1e-4 recovers the same well-conditioned
+        pseudo-inverse; the default sits in the middle of that safe range.
     """
 
     def __init__(
@@ -215,7 +213,7 @@ class KLPCDA(BaseEstimator, TransformerMixin):
             B, W = class_scatter_operators(y)
 
         alpha, beta = self.fusion
-        tie_break = None  # see DECISIONS.md -- only No.1/No.5 have one
+        tie_break = None  # only No.1/No.5 have an in-formula tie-break term
 
         if self.method == "no1":
             WK = W @ K_tilde
@@ -235,9 +233,9 @@ class KLPCDA(BaseEstimator, TransformerMixin):
             largest = True
             # No secondary term of No.3's own (pure S_b/S_w) to tie-break
             # with: B itself is exactly what's degenerate here (its range
-            # lies entirely in W's null space under balanced sampling --
-            # see DECISIONS.md), so there is nothing left within this
-            # variant's own definition to resolve the ambiguity.
+            # lies entirely in W's null space under balanced sampling), so
+            # there is nothing left within this variant's own definition to
+            # resolve the ambiguity.
         elif self.method == "no4":
             E = K_tilde
             largest = True
